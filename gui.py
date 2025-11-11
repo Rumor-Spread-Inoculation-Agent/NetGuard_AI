@@ -118,14 +118,16 @@ class MainWindow(QWidget):
         self.spin_budget = QSpinBox(); self.spin_budget.setRange(0, 100); self.spin_budget.setValue(self.env.daily_budget)
         hp2.addWidget(self.spin_budget)
         right.addLayout(hp2)
-
         # Agent selection
         right.addWidget(QLabel('Agent'))
         self.btn_agent_heur = QPushButton('Heuristic (degree)')
+        self.btn_agent_heur.clicked.connect(self._run_heuristic_selected)
+        right.addWidget(self.btn_agent_heur)
+
         self.btn_agent_random = QPushButton('Random')
         self.btn_agent_mcts = QPushButton('MCTS (stub)')
         self.btn_agent_rl = QPushButton('RL-GNN (stub)')
-        self.btn_agent_heur.clicked.connect(lambda: self._set_agent('heur'))
+        
         self.btn_agent_random.clicked.connect(lambda: self._set_agent('rand'))
         self.btn_agent_mcts.clicked.connect(lambda: self._set_agent('mcts'))
         self.btn_agent_rl.clicked.connect(lambda: self._set_agent('rl'))
@@ -198,6 +200,66 @@ class MainWindow(QWidget):
         main_layout.addLayout(right, 1)
 
         self.setLayout(main_layout)
+    
+    def _run_heuristic_selected(self):
+        """Select and start auto-run using the Heuristic agent."""
+        self._set_agent('heur')
+        self.log.append("Heuristic agent auto-run started.")
+        self.timer.timeout.disconnect()  # disconnect previous connection if any
+        self.timer.timeout.connect(self._heuristic_auto_step)
+        self.timer.start()
+
+    def _heuristic_auto_step(self):
+        """Automatically step the environment using the heuristic agent."""
+        agent = HeuristicAgent(self.env)
+        state = {'status': self.env.status.copy()}
+        selected_nodes = agent.getAction(state, budget=self.env.daily_budget)
+        self.env.inoculate(selected_nodes)
+
+        self.log.append(f"Heuristic agent inoculated nodes: {selected_nodes}")
+        summary = self.env.step()
+        self._update_score()
+        self._refresh()
+        self.log.append(f"Day {summary['day']} → Infected: {len(summary['newly_infected'])}")
+        # Stop automatically if game over
+        if self._check_game_over():
+            self.timer.stop()
+
+
+
+
+    def run_heuristic_agent(self):
+        """Run one step using the HeuristicAgent."""
+        if not hasattr(self, 'env'):
+            self.log.append("⚠️ Environment not initialized!")
+            return
+
+        agent = HeuristicAgent(self.env)
+        state = {'status': self.env.status.copy()}
+
+        selected_nodes = agent.getAction(state, budget=self.env.daily_budget)
+        self.env.inoculate(selected_nodes)
+
+        self.log.append(f"Heuristic agent inoculated nodes: {selected_nodes}")
+
+        # Step the environment one day forward
+        summary = self.env.step()
+
+        # Update score and UI
+        self._update_score()
+        self._refresh()
+
+        # Log infection progress
+        self.log.append(
+            f"Day {summary['day']} → Infected: {len(summary['newly_infected'])}, "
+            #f"Cured: {len(summary['newly_cured'])}"
+        )
+
+        # Check for end of episode
+        self._check_game_over()
+
+
+
 
     def _check_game_over(self):
         counts = self.env.counts()

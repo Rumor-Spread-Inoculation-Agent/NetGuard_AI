@@ -4,9 +4,9 @@ agents.py
 Contains simple agent stubs:
 - BaseAgent
 - HeuristicAgent (degree-based)
-- RandomAgent
 - MCTSAgent (stub)
 - RLAgent (stub)
+- GNNAgent
 """
 
 import numpy as np
@@ -23,16 +23,20 @@ class BaseAgent:
 
 
 class HeuristicAgent(BaseAgent):
-    """Pick highest-degree susceptible nodes."""
+    """Heuristic agent that picks the highest-degree susceptible nodes."""
+
     def __init__(self, env: RumorEnv):
         super().__init__('Heuristic-Degree')
         self.env = env
 
     def getAction(self, state: Dict, budget: int) -> List[int]:
         G = self.env.G
-        cands = [n for n in G.nodes() if self.env.status[n] == RumorEnv.SUS]
-        cands_sorted = sorted(cands, key=lambda x: G.degree[x], reverse=True)
-        return cands_sorted[:budget]
+        # Find susceptible (uninfected & uncured) nodes
+        candidates = [n for n in G.nodes() if self.env.status[n] == RumorEnv.SUS]
+        # Sort by node degree (descending)
+        sorted_candidates = sorted(candidates, key=lambda x: G.degree[x], reverse=True)
+        # Pick top-k nodes as per budget
+        return sorted_candidates[:budget]
 
 
 class RandomAgent(BaseAgent):
@@ -71,3 +75,4 @@ class RLAgent(BaseAgent):
         if len(sus) == 0:
             return []
         return list(np.random.choice(sus, size=min(budget, len(sus)), replace=False))
+

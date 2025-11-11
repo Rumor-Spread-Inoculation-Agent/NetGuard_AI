@@ -4,7 +4,9 @@ environment.py
 Rumor spread environment using a Barabási–Albert graph.
 
 State encoding (compatible with the GUI and agents):
-    RumorEnv.SUS = 0
+    
+    
+    .SUS = 0
     RumorEnv.INF = 1
     RumorEnv.INO = 2
 """
