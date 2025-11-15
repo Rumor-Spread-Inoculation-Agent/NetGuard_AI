@@ -121,7 +121,7 @@ class MainWindow(QWidget):
         # Agent selection
         right.addWidget(QLabel('Agent'))
         self.btn_agent_heur = QPushButton('Heuristic (degree)')
-        self.btn_agent_heur.clicked.connect(self._run_heuristic_selected)
+        self.btn_agent_heur.clicked.connect(lambda: self._set_agent('heur'))
         right.addWidget(self.btn_agent_heur)
 
         self.btn_agent_random = QPushButton('Random')
@@ -200,33 +200,6 @@ class MainWindow(QWidget):
         main_layout.addLayout(right, 1)
 
         self.setLayout(main_layout)
-    
-    def _run_heuristic_selected(self):
-        """Select and start auto-run using the Heuristic agent."""
-        self._set_agent('heur')
-        self.log.append("Heuristic agent auto-run started.")
-        self.timer.timeout.disconnect()  # disconnect previous connection if any
-        self.timer.timeout.connect(self._heuristic_auto_step)
-        self.timer.start()
-
-    def _heuristic_auto_step(self):
-        """Automatically step the environment using the heuristic agent."""
-        agent = HeuristicAgent(self.env)
-        state = {'status': self.env.status.copy()}
-        selected_nodes = agent.getAction(state, budget=self.env.daily_budget)
-        self.env.inoculate(selected_nodes)
-
-        self.log.append(f"Heuristic agent inoculated nodes: {selected_nodes}")
-        summary = self.env.step()
-        self._update_score()
-        self._refresh()
-        self.log.append(f"Day {summary['day']} → Infected: {len(summary['newly_infected'])}")
-        # Stop automatically if game over
-        if self._check_game_over():
-            self.timer.stop()
-
-
-
 
     def run_heuristic_agent(self):
         """Run one step using the HeuristicAgent."""

@@ -46,7 +46,7 @@ class RumorEnv:
 
     def _build_graph(self):
         # build BA graph
-        self.G = nx.barabasi_albert_graph(self.n_nodes, self.m_edges, seed=self.seed)
+        '''self.G = nx.barabasi_albert_graph(self.n_nodes, self.m_edges, seed=self.seed)
         # statuses: SUS / INF / INO
         self.status = {n: RumorEnv.SUS for n in self.G.nodes()}
         # choose initial infected nodes (ensure we don't ask for more than available)
@@ -54,6 +54,20 @@ class RumorEnv:
         starts = random.sample(list(self.G.nodes()), k=k)
         for s in starts:
             self.status[s] = RumorEnv.INF
+        self.day = 0
+        self.history = []'''
+
+        # A TOY PROBLEM TO SHOW THE PERFORMANCE UPGRADE OF MCTS OVER HEURISTIC AND RANDOM AGENTS.
+        self.G = nx.barbell_graph(5, 1)
+
+        # 2. Set all nodes to Susceptible
+        self.status = {n: RumorEnv.SUS for n in self.G.nodes()}
+
+        # 3. Manually infect a "leaf" node on one side (e.g., node 0)
+        # This is far from the bridge (node 5)
+        self.status[0] = RumorEnv.INF
+        # --- END TEST MODIFICATION ---
+
         self.day = 0
         self.history = []
 
