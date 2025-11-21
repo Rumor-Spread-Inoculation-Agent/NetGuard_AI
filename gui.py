@@ -28,7 +28,7 @@ from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
 
 from environment import RumorEnv
-from agents import HeuristicAgent, RandomAgent, MCTSAgent, RLAgent
+from agents import HeuristicAgent, RLDQLAgent, MCTSAgent, RLAgent
 from utils import save_log_text
 
 
@@ -124,38 +124,41 @@ class MainWindow(QWidget):
         self.btn_agent_heur.clicked.connect(lambda: self._set_agent('heur'))
         right.addWidget(self.btn_agent_heur)
 
-        self.btn_agent_random = QPushButton('Random')
+        self.btn_agent_dql = QPushButton('DQL')
         self.btn_agent_mcts = QPushButton('MCTS (stub)')
         self.btn_agent_rl = QPushButton('RL-GNN (stub)')
         
-        self.btn_agent_random.clicked.connect(lambda: self._set_agent('rand'))
+        self.btn_agent_dql.clicked.connect(lambda: self._set_agent('rand'))
         self.btn_agent_mcts.clicked.connect(lambda: self._set_agent('mcts'))
         self.btn_agent_rl.clicked.connect(lambda: self._set_agent('rl'))
         right.addWidget(self.btn_agent_heur)
-        right.addWidget(self.btn_agent_random)
+        right.addWidget(self.btn_agent_dql)
         right.addWidget(self.btn_agent_mcts)
         right.addWidget(self.btn_agent_rl)
 
         # Simulation controls (kept exactly like your original UI)
         right.addWidget(QLabel('Simulation'))
         self.btn_reset = QPushButton('Reset Environment')
+        self.btn_new_env = QPushButton("New Environment")
         self.btn_step = QPushButton('Step (one day)')
         self.btn_run = QPushButton('Run (auto)')
         self.btn_stop = QPushButton('Stop')
         self.btn_run_agent_step = QPushButton('Agent: inoculate & step')
 
         self.btn_reset.clicked.connect(self._reset_env)
+        self.btn_new_env.clicked.connect(self.new_environment)
         self.btn_step.clicked.connect(self._manual_step)
         self.btn_run.clicked.connect(self._start_auto)
         self.btn_stop.clicked.connect(self._stop_auto)
         self.btn_run_agent_step.clicked.connect(self._agent_action_and_step)
 
         right.addWidget(self.btn_reset)
+        right.addWidget(self.btn_new_env)
         right.addWidget(self.btn_step)
         right.addWidget(self.btn_run)
         right.addWidget(self.btn_stop)
         right.addWidget(self.btn_run_agent_step)
-
+        
         # User plays as agent (placed below Simulation buttons per your choice)
         right.addWidget(QLabel('User (play as Agent) - enter node numbers comma-separated:'))
         user_h = QHBoxLayout()
@@ -200,6 +203,34 @@ class MainWindow(QWidget):
         main_layout.addLayout(right, 1)
 
         self.setLayout(main_layout)
+
+    def new_environment(self):
+        """
+        Create a brand new environment (new graph + initial infected) using current UI params.
+        This replaces self.env with a fresh RumorEnv instance.
+        """
+        nodes = int(self.spin_nodes.value())
+        m = int(self.spin_m.value())
+        p = float(self.spin_p.value())
+        budget = int(self.spin_budget.value())
+
+        # Instantiate a fresh environment (new graph, initial infected chosen inside)
+        self.env = RumorEnv(n_nodes=nodes, m_edges=m, p_infect=p, initial_infected=1, daily_budget=budget)
+
+        # If the current agent holds an env reference, update it
+        try:
+            if isinstance(self.agent, HeuristicAgent) or isinstance(self.agent, MCTSAgent):
+                self.agent.env = self.env
+        except Exception:
+            pass
+
+        # Reset UI elements
+        self.score = 0
+        self.score_label.setText("Score: 0")
+        self.log.append("Created NEW environment (new graph).")
+        self._refresh()
+
+
 
     def run_heuristic_agent(self):
         """Run one step using the HeuristicAgent."""
@@ -255,8 +286,8 @@ class MainWindow(QWidget):
             self.agent = HeuristicAgent(self.env)
             self.log.append('Switched to Heuristic agent')
         elif which == 'rand':
-            self.agent = RandomAgent()
-            self.log.append('Switched to Random agent')
+            self.agent = RLDQLAgent()
+            self.log.append('Switched to DQL agent')
         elif which == 'mcts':
             self.agent = MCTSAgent(self.env)
             self.log.append('Switched to MCTS (stub) agent')
@@ -267,23 +298,32 @@ class MainWindow(QWidget):
             self.log.append('Unknown agent selection')
 
     def _reset_env(self):
+        # Reset the current environment's state to the initial snapshot (same graph)
+        # Update UI parameters (in case user changed them in the UI)
         nodes = int(self.spin_nodes.value())
         m = int(self.spin_m.value())
         p = float(self.spin_p.value())
         budget = int(self.spin_budget.value())
-        # Recreate env with new parameters
-        self.env = RumorEnv(n_nodes=nodes, m_edges=m, p_infect=p, initial_infected=1, daily_budget=budget)
-        # If agent needs env reference, update (Heuristic/MCTS)
-        self.score = 0
-        self.score_label.setText("Score: 0")
 
+        # If the UI changed nodes/m/maybe user expects new graph, don't rebuild here.
+        # Keep the same graph structure — just reset to the saved initial state.
+        self.env.daily_budget = budget
+        self.env.p_infect = p
+        # restore snapshot
+        self.env.reset()
+
+        # If agent uses env reference, keep it
         if isinstance(self.agent, HeuristicAgent) or isinstance(self.agent, MCTSAgent):
             try:
                 self.agent.env = self.env
             except Exception:
                 pass
-        self.log.append('Environment reset')
+
+        self.score = 0
+        self.score_label.setText("Score: 0")
+        self.log.append('Environment reset to initial state (same graph).')
         self._refresh()
+
 
     def _manual_step(self):
         summary = self.env.step()
@@ -422,4 +462,3 @@ class MainWindow(QWidget):
         self.canvas.draw_graph(self.env.G, self.env.status, show_labels=show_labels)
         c = self.env.counts()
         self.status_label.setText(f"Day: {self.env.day} | S: {c['susceptible']} I: {c['infected']} R: {c['inoculated']}")
-

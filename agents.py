@@ -1,159 +1,278 @@
 """
 agents.py
 
-Contains simple agent stubs:
-- BaseAgent
-- HeuristicAgent (degree-based)
-- MCTSAgent (stub)
-- RLAgent (stub)
-- GNNAgent
-"""
-import random
+Contains agent implementations / stubs for the Rumor Spread project.
 
-import numpy as np
+Provides:
+ - BaseAgent
+ - RandomAgent
+ - HeuristicAgent
+ - MCTSAgent
+ - RLDQLAgent (stub)
+ - RLGNNAgent (stub)
+ - RLAgent (alias to RLGNNAgent for backward compatibility)
+"""
+
+import random
 import copy
 import math
-from typing import List, Dict
+from typing import List, Dict, Optional
+
+import numpy as np
+
 from environment import RumorEnv
 
 
+# -------------------------
+# Base
+# -------------------------
 class BaseAgent:
-    def __init__(self, name='Base'):
+    def __init__(self, name: str = "Base"):
         self.name = name
 
     def getAction(self, state: Dict, budget: int) -> List[int]:
+        """Return a list of node IDs to inoculate (length <= budget)."""
         raise NotImplementedError
 
 
-class HeuristicAgent(BaseAgent):
-    """Heuristic agent that picks the highest-degree susceptible nodes."""
+# -------------------------
+# Helper: extract susceptible node IDs robustly
+# -------------------------
+def _extract_susceptible_nodes(env: RumorEnv, state: Dict) -> List[int]:
+    """
+    Accept either:
+      - state returned by env.get_state() where state['status'] is a numpy array aligned
+        with sorted(env.G.nodes()), or
+      - a dict mapping node_id -> status (like env.status.copy()).
+    Returns a list of node ids currently susceptible.
+    """
+    if "status" not in state:
+        return [n for n, s in env.status.items() if s == RumorEnv.SUS]
 
+    s = state["status"]
+
+    # numpy array case
+    if isinstance(s, np.ndarray):
+        nodes_sorted = sorted(env.G.nodes())
+        idxs = np.where(s == RumorEnv.SUS)[0].tolist()
+        return [nodes_sorted[i] for i in idxs]
+
+    # dict case
+    if isinstance(s, dict):
+        return [n for n, st in s.items() if st == RumorEnv.SUS]
+
+    # fallback: env.status
+    return [n for n, st in env.status.items() if st == RumorEnv.SUS]
+
+
+# -------------------------
+# Random agent
+# -------------------------
+class RandomAgent(BaseAgent):
+    def __init__(self, env: Optional[RumorEnv] = None):
+        super().__init__("Random")
+        self.env = env
+
+    def getAction(self, state: Dict, budget: int) -> List[int]:
+        if self.env is None:
+            raise RuntimeError("RandomAgent requires env reference (pass env to constructor or assign .env).")
+        sus = _extract_susceptible_nodes(self.env, state)
+        if not sus:
+            return []
+        k = min(budget, len(sus))
+        # choose actual node IDs
+        return list(np.random.choice(sus, size=k, replace=False))
+
+
+# -------------------------
+# Heuristic: highest-degree susceptible nodes
+# -------------------------
+class HeuristicAgent(BaseAgent):
     def __init__(self, env: RumorEnv):
-        super().__init__('Heuristic-Degree')
+        super().__init__("Heuristic-Degree")
         self.env = env
 
     def getAction(self, state: Dict, budget: int) -> List[int]:
         G = self.env.G
-        # Find susceptible (uninfected & uncured) nodes
-        candidates = [n for n in G.nodes() if self.env.status[n] == RumorEnv.SUS]
-        # Sort by node degree (descending)
-        sorted_candidates = sorted(candidates, key=lambda x: G.degree[x], reverse=True)
-        # Pick top-k nodes as per budget
-        return sorted_candidates[:budget]
+        # Prefer authoritative source: env.status
+        sus = [n for n, st in self.env.status.items() if st == RumorEnv.SUS]
 
+        # If that happens to be empty (unlikely), try extracting from provided state
+        if not sus:
+            sus = _extract_susceptible_nodes(self.env, state)
 
-class RandomAgent(BaseAgent):
-    def __init__(self):
-        super().__init__('Random')
-
-    def getAction(self, state: Dict, budget: int) -> List[int]:
-        sus = np.where(state['status'] == RumorEnv.SUS)[0]
-        if len(sus) == 0:
+        if not sus:
             return []
-        choice = list(np.random.choice(sus, size=min(budget, len(sus)), replace=False))
-        return choice
 
+        # sort by degree descending and return top-k node ids
+        sorted_nodes = sorted(sus, key=lambda n: G.degree[n], reverse=True)
+        return sorted_nodes[:budget]
+
+
+# -------------------------
+# MCTS helpers & agent
+# -------------------------
 class MCTSNode:
-    def __init__(self, parent, action: int):
+    def __init__(self, parent: Optional["MCTSNode"], action: Optional[int] = None):
         self.parent = parent
-        self.action = action
-        self.children = {}
-        self.visit_count = 0
-        self.total_reward = 0.0
-    def fully_expanded(self, legal_moves : List[int]):
-        return len(legal_moves) == len(self.children)
+        self.action = action  # node id that produced this node (None for root)
+        self.children: Dict[int, "MCTSNode"] = {}
+        self.visit_count: int = 0
+        self.total_reward: float = 0.0
+
+    def is_fully_expanded(self, legal_actions: List[int]) -> bool:
+        return len(self.children) >= len(legal_actions)
+
 
 class MCTSAgent(BaseAgent):
-    """Stub for MCTS/Planning agent. Returns heuristic fallback until implemented."""
-    def __init__(self, env: RumorEnv, simulations: int = 100, horizon: int = 15):
-        super().__init__('MCTS')
+    """
+    MCTS planning agent (simple rollout-based).
+    Returns a list of node-ids to inoculate (planned greedily up to budget).
+    """
+
+    def __init__(self, env: RumorEnv, simulations: int = 100, horizon: int = 10):
+        super().__init__("MCTS")
         self.env = env
-        self.simulations = simulations
-        self.horizon = horizon
+        self.simulations = int(simulations)
+        self.horizon = int(horizon)
 
-    def rollout(self, sim_env):
-        temp_env = copy.deepcopy(sim_env)
-        total_new_infections = 0
+    def rollout(self, sim_env: RumorEnv) -> float:
+        """Random rollout: inoculate random nodes each step, sum new infections (we minimize)."""
+        temp = copy.deepcopy(sim_env)
+        total_new = 0
         for _ in range(self.horizon):
-            sus_nodes = [n for n, s in temp_env.status.items() if s == RumorEnv.SUS]
-            if(not sus_nodes):
+            sus = [n for n, st in temp.status.items() if st == RumorEnv.SUS]
+            if not sus:
                 break
-            action = list(np.random.choice(sus_nodes, size = min(temp_env.daily_budget, len(sus_nodes)), replace=False))
-            temp_env.inoculate(action)
-            summary = temp_env.step()
-            total_new_infections += len(summary["newly_infected"])
-        return -total_new_infections
+            k = min(temp.daily_budget, len(sus))
+            chosen = list(np.random.choice(sus, size=k, replace=False))
+            temp.inoculate(chosen)
+            summary = temp.step()
+            total_new += len(summary.get("newly_infected", []))
+        return -total_new  # negative because lower new infections is better
 
-    def select_best_child_uct(self, node):
+    def select_child_by_uct(self, node: MCTSNode, c: float = 1.414) -> Optional[MCTSNode]:
+        best = None
         best_score = -float("inf")
-        best_child = None
-        c = 1.42
         for child in node.children.values():
             if child.visit_count == 0:
                 return child
-            exploitation_score = child.total_reward / child.visit_count
-            exploration_score = c * math.sqrt(math.log(node.visit_count) / child.visit_count)
-            uct_score = exploration_score + exploitation_score
-            if uct_score > best_score:
-                best_child = child
-                best_score = uct_score
-        return best_child
+            exploit = child.total_reward / child.visit_count
+            explore = c * math.sqrt(math.log(max(1, node.visit_count)) / child.visit_count)
+            score = exploit + explore
+            if score > best_score:
+                best_score = score
+                best = child
+        return best
 
-    def mcts_search(self, root_env):
-        legal_moves = [n for n, s in root_env.status.items() if s == RumorEnv.SUS]
-        if not legal_moves:
+    def mcts_search(self, root_env: RumorEnv) -> Optional[int]:
+        legal_root = [n for n, st in root_env.status.items() if st == RumorEnv.SUS]
+        if not legal_root:
             return None
-        root_node = MCTSNode(parent=None, action=None)
+
+        root = MCTSNode(parent=None)
+
         for _ in range(self.simulations):
             sim_env = copy.deepcopy(root_env)
-            current_node = root_node
-            while current_node.fully_expanded(legal_moves) and current_node.children:
-                current_node = self.select_best_child_uct(current_node)
-                sim_env.inoculate([current_node.action])
+            node = root
 
-            if not current_node.fully_expanded(legal_moves):
-                unexpanded_actions = [m for m in legal_moves if m not in current_node.children]
-                action = random.choice(unexpanded_actions)
+            # Selection
+            legal_actions = [n for n, st in sim_env.status.items() if st == RumorEnv.SUS]
+            while node.children and node.is_fully_expanded(legal_actions):
+                node = self.select_child_by_uct(node)
+                if node is None:
+                    break
+                # apply the action that led to child (if any)
+                if node.action is not None:
+                    sim_env.inoculate([node.action])
+                    sim_env.step()
+                legal_actions = [n for n, st in sim_env.status.items() if st == RumorEnv.SUS]
+                if not legal_actions:
+                    break
 
-                new_child = MCTSNode(parent=current_node, action=action)
-                current_node.children[action] = new_child
-                current_node = new_child
+            # Expansion
+            legal_actions = [n for n, st in sim_env.status.items() if st == RumorEnv.SUS]
+            unexpanded = [a for a in legal_actions if a not in node.children]
+            if unexpanded:
+                act = random.choice(unexpanded)
+                child = MCTSNode(parent=node, action=act)
+                node.children[act] = child
+                node = child
+                sim_env.inoculate([act])
+                sim_env.step()
 
-                sim_env.inoculate([action])
-
+            # Rollout
             reward = self.rollout(sim_env)
-            while current_node is not None:
-                current_node.visit_count += 1
-                current_node.total_reward += reward
-                current_node = current_node.parent
 
-        if not root_node.children:
-            return random.choice(legal_moves)  # Failsafe
+            # Backpropagation
+            temp = node
+            while temp is not None:
+                temp.visit_count += 1
+                temp.total_reward += reward
+                temp = temp.parent
 
-        best_child = max(root_node.children.values(), key=lambda n: n.visit_count)
+        if not root.children:
+            return random.choice(legal_root)
+        best_child = max(root.children.values(), key=lambda c: c.visit_count)
         return best_child.action
 
     def getAction(self, state: Dict, budget: int) -> List[int]:
         sim_env = copy.deepcopy(self.env)
-        chosen_nodes = []
+        chosen: List[int] = []
         for _ in range(budget):
-            best_node = self.mcts_search(sim_env)
-            if best_node is None:
+            best = self.mcts_search(sim_env)
+            if best is None:
                 break
-            chosen_nodes.append(best_node)
+            chosen.append(best)
+            sim_env.inoculate([best])
+            sim_env.step()
+        return chosen
 
-            sim_env.inoculate([best_node])
 
-        return chosen_nodes
-
-class RLAgent(BaseAgent):
-    """Stub for RL agent using GNN encoding. Returns random for now."""
-    def __init__(self):
-        super().__init__('RL-GNN')
+# -------------------------
+# RL stubs
+# -------------------------
+class RLDQLAgent(BaseAgent):
+    """
+    Placeholder stub for an RL agent using Deep Q-Learning.
+    Implement training/inference and return top-k node ids by Q-values.
+    """
+    def __init__(self, env: Optional[RumorEnv] = None):
+        super().__init__("RL-DQL")
+        self.env = env
 
     def getAction(self, state: Dict, budget: int) -> List[int]:
-        sus = np.where(state['status'] == RumorEnv.SUS)[0]
-        if len(sus) == 0:
+        # TODO: implement Q-network forward pass; for now random fallback
+        if self.env is None:
+            raise RuntimeError("RLDQLAgent requires env reference")
+        sus = _extract_susceptible_nodes(self.env, state)
+        if not sus:
             return []
-        return list(np.random.choice(sus, size=min(budget, len(sus)), replace=False))
+        k = min(budget, len(sus))
+        return list(np.random.choice(sus, size=k, replace=False))
 
+
+class RLGNNAgent(BaseAgent):
+    """
+    Placeholder stub for a GNN-based agent.
+    Implement node-embedding + policy/Q head and return top-k node ids.
+    """
+    def __init__(self, env: Optional[RumorEnv] = None):
+        super().__init__("RL-GNN")
+        self.env = env
+
+    def getAction(self, state: Dict, budget: int) -> List[int]:
+        # TODO: encode graph + state, run GNN, pick top-k nodes by score
+        if self.env is None:
+            raise RuntimeError("RLGNNAgent requires env reference")
+        sus = _extract_susceptible_nodes(self.env, state)
+        if not sus:
+            return []
+        k = min(budget, len(sus))
+        return list(np.random.choice(sus, size=k, replace=False))
+
+
+# Keep backward-compatible name RLAgent -> use GNN stub by default
+class RLAgent(RLGNNAgent):
+    def __init__(self, env: Optional[RumorEnv] = None):
+        super().__init__(env)

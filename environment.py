@@ -44,36 +44,62 @@ class RumorEnv:
 
         self._build_graph()
 
+    def init_graph_state(self):
+        """Initialize infection state after graph is replaced."""
+        self.day = 0
+        self.score = 0
+
+        # all susceptible initially
+        self.status = {n: RumorEnv.SUS for n in self.G.nodes()}
+
+        # infect one random node
+        patient_zero = random.choice(list(self.G.nodes()))
+        self.status[patient_zero] = RumorEnv.INF
+
+        # store initial state for reset()
+        self.initial_status = self.status.copy()
+        self.initial_day = 0
+        self.initial_score = 0
+
+
     def _build_graph(self):
-        # build BA graph
-        '''self.G = nx.barabasi_albert_graph(self.n_nodes, self.m_edges, seed=self.seed)
+        # build BA graph (or toy graph used in your tests)
+        self.G = nx.barabasi_albert_graph(self.n_nodes, self.m_edges, seed=self.seed)
+
         # statuses: SUS / INF / INO
         self.status = {n: RumorEnv.SUS for n in self.G.nodes()}
+
         # choose initial infected nodes (ensure we don't ask for more than available)
         k = min(self.initial_infected, len(self.G.nodes()))
         starts = random.sample(list(self.G.nodes()), k=k)
         for s in starts:
             self.status[s] = RumorEnv.INF
-        self.day = 0
-        self.history = []'''
-
-        # A TOY PROBLEM TO SHOW THE PERFORMANCE UPGRADE OF MCTS OVER HEURISTIC AND RANDOM AGENTS.
-        self.G = nx.barbell_graph(5, 1)
-
-        # 2. Set all nodes to Susceptible
-        self.status = {n: RumorEnv.SUS for n in self.G.nodes()}
-
-        # 3. Manually infect a "leaf" node on one side (e.g., node 0)
-        # This is far from the bridge (node 5)
-        self.status[0] = RumorEnv.INF
-        # --- END TEST MODIFICATION ---
 
         self.day = 0
         self.history = []
 
+        # --- Save the initial snapshot so reset() can restore it ---
+        # store a copy of node statuses and other initial fields
+        self._initial_status = self.status.copy()
+        self._initial_day = self.day
+        self._initial_history = list(self.history)
+
+
     def reset(self):
-        self._build_graph()
+        """
+        Restore the environment to the initial snapshot (same graph structure).
+        This does NOT create a new graph; it returns to the initial infection placement.
+        """
+        # restore saved initial snapshot if available
+        if hasattr(self, "_initial_status"):
+            self.status = self._initial_status.copy()
+            self.day = int(self._initial_day)
+            self.history = list(self._initial_history)
+        else:
+            # fallback: rebuild graph
+            self._build_graph()
         return self.get_state()
+
 
     def inoculate(self, nodes: List[int]) -> int:
         """Mark listed nodes as inoculated (INO). Returns how many actually changed."""
