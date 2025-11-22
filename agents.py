@@ -17,6 +17,9 @@ import random
 import copy
 import math
 from typing import List, Dict, Optional
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
 
 import numpy as np
 
@@ -230,8 +233,21 @@ class MCTSAgent(BaseAgent):
 
 
 # -------------------------
-# RL stubs
+# RL
 # -------------------------
+class DQN(nn.Module):
+    def __init__(self, input_size, output_size):
+        super(DQN, self).__init__()
+        self.layer1 = nn.Linear(input_size, 128)
+        self.layer2 = nn.Linear(128, 128)
+        self.outputlayer = nn.Linear(128, output_size)
+    def forward(self, x):
+        
+        x = F.relu(self.layer1(x))
+        x = F.relu(self.layer2(x))
+
+        return self.outputlayer(x)
+
 class RLDQLAgent(BaseAgent):
     """
     Placeholder stub for an RL agent using Deep Q-Learning.
