@@ -20,9 +20,8 @@ from typing import List, Dict, Optional
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-
+from collections import deque, namedtuple
 import numpy as np
-
 from environment import RumorEnv
 
 
@@ -238,35 +237,187 @@ class MCTSAgent(BaseAgent):
 class DQN(nn.Module):
     def __init__(self, input_size, output_size):
         super(DQN, self).__init__()
-        self.layer1 = nn.Linear(input_size, 128)
-        self.layer2 = nn.Linear(128, 128)
-        self.outputlayer = nn.Linear(128, output_size)
+        self.layer1 = nn.Linear(input_size, 128) #first layer receiving input and learns the weight vectors and convert the inputs to 128 numbers
+        self.layer2 = nn.Linear(128, 128) #second layer that takes the 128 numbers and learns complex patterns and produces 128 numbers again
+        self.outputlayer = nn.Linear(128, output_size) #takes those 128 numbers and returns a vector of size output size
+
+    #this function defines the pass input->output
     def forward(self, x):
-        
+
         x = F.relu(self.layer1(x))
         x = F.relu(self.layer2(x))
 
         return self.outputlayer(x)
+Transition = namedtuple('Transition', ('state', 'action', 'reward', 'next_state', 'done'))
+class ReplayMemory(object):
+    def __init__(self, capacity):
+        self.memory = deque([], maxlen=capacity)
+
+    def push(self, *args):
+        """Save a transition"""
+        self.memory.append(Transition(*args))
+
+    def sample(self, batch_size):
+        return random.sample(self.memory, batch_size)
+
+    def __len__(self):
+        return len(self.memory)
 
 class RLDQLAgent(BaseAgent):
     """
     Placeholder stub for an RL agent using Deep Q-Learning.
     Implement training/inference and return top-k node ids by Q-values.
     """
-    def __init__(self, env: Optional[RumorEnv] = None):
+    def __init__(self, env: Optional[RumorEnv] = None, learning_rate = 0.001):
         super().__init__("RL-DQL")
         self.env = env
+        self.epsilon = 1.0
+        self.epsilon_min = 1e-2
+        self.epsilon_decay = 0.995
+        self.input_size = env.n_nodes
+        self.output_size = env.n_nodes
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.policy_net = DQN(self.input_size, self.output_size).to(self.device)
+        self.target_net = DQN(self.input_size, self.output_size).to(self.device)
+        self.optimizer = torch.optim.Adam(self.policy_net.parameters(), lr=learning_rate)
+        self.memory = ReplayMemory(10000)  # Capacity N
+        self.batch_size = 64  # How many memories to learn from at once
+        self.gamma = 0.99  # Discount factor (Future vs Now)
+        self.target_update = 10  # Update target net every 10 episodes
+        import os
+        model_path = 'models/dqn_policy.pth'
+
+        if os.path.exists(model_path):
+            # 1. Load the weights from the file
+            self.policy_net.load_state_dict(torch.load(model_path, map_location=self.device))
+
+            # 2. Set to Evaluation Mode (tells PyTorch we are not training)
+            self.policy_net.eval()
+
+            # 3. CRITICAL: Turn off Randomness!
+            # We want to show off the learned strategy, not explore.
+            self.epsilon = 0.0
+
+            print(f"✅ Loaded trained model from {model_path}")
+        else:
+            print(f"⚠️ No trained model found at {model_path}. Running with random weights.")
+
 
     def getAction(self, state: Dict, budget: int) -> List[int]:
         # TODO: implement Q-network forward pass; for now random fallback
         if self.env is None:
             raise RuntimeError("RLDQLAgent requires env reference")
-        sus = _extract_susceptible_nodes(self.env, state)
-        if not sus:
-            return []
-        k = min(budget, len(sus))
-        return list(np.random.choice(sus, size=k, replace=False))
+        # 1. Identify valid (susceptible) nodes
+        # We can only inoculate nodes that are currently SUSCEPTIBLE (0)
+        # state['status'] is a numpy array e.g., [0, 1, 0, 2...]
+        susceptible_mask = (state['status'] == RumorEnv.SUS)
+        valid_indices = np.where(susceptible_mask)[0]
 
+        # If no nodes are left to save, return empty
+        if len(valid_indices) == 0:
+            return []
+
+        # Ensure budget doesn't exceed available nodes
+        k = min(budget, len(valid_indices))
+
+        # --- EXPLORATION (Random) ---
+        if random.random() < self.epsilon:
+            return list(np.random.choice(valid_indices, size=k, replace=False))
+
+        # --- EXPLOITATION (Neural Network) ---
+        else:
+            # 1. Prepare Input
+            # Convert status array to a Float Tensor on the correct device
+            # We add a batch dimension [1, 120] because the NN expects batches
+            status_tensor = torch.FloatTensor(state['status']).unsqueeze(0).to(self.device)
+
+            # 2. Ask the Network
+            with torch.no_grad():  # We are not training, so turn off gradients
+                q_values = self.policy_net(status_tensor)  # Shape: [1, 120]
+
+            # 3. Masking (CRITICAL STEP)
+            # The network might be dumb and try to pick an Infected node.
+            # We force the Q-values of invalid nodes to be -Infinity.
+
+            # Create a tensor of -inf
+            minus_inf = torch.tensor(float('-inf')).to(self.device)
+
+            # We need a boolean mask for INVALID nodes (opposite of susceptible)
+            # 1 means valid, 0 means invalid.
+            # We want to keep valid Q-values, and overwrite invalid ones.
+            valid_mask_tensor = torch.BoolTensor(susceptible_mask).to(self.device)
+
+            # Where valid_mask is True, keep q_values. Where False, set to -inf.
+            masked_q_values = torch.where(valid_mask_tensor, q_values, minus_inf)
+
+            # 4. Pick Top-K
+            # shape[1] because shape is [1, 120]
+            top_k_values, top_k_indices = torch.topk(masked_q_values, k=k)
+
+            # Convert tensors back to a standard Python list of ints
+            return top_k_indices[0].cpu().numpy().tolist()
+
+    def train_step(self):
+        """
+        The Heart of Deep Q-Learning.
+        1. Sample a batch of memories.
+        2. Calculate the 'Real' Q-value (from Policy Net).
+        3. Calculate the 'Target' Q-value (from Target Net + Reward).
+        4. Calculate Loss (difference) and update weights.
+        """
+        # 1. Don't train if we don't have enough memories yet
+        if len(self.memory) < self.batch_size:
+            return
+
+        # 2. Sample a random batch
+        transitions = self.memory.sample(self.batch_size)
+        # Unzip the batch (turn a list of Transitions into a Transition of lists)
+        batch = Transition(*zip(*transitions))
+
+        # 3. Convert to Tensors (and move to GPU if available)
+        # Note: We stack them to create a batch dimension
+        state_batch = torch.FloatTensor(np.array(batch.state)).to(self.device)
+        action_batch = torch.LongTensor(batch.action).unsqueeze(1).to(self.device)  # Shape [64, 1]
+        reward_batch = torch.FloatTensor(batch.reward).to(self.device)
+        next_state_batch = torch.FloatTensor(np.array(batch.next_state)).to(self.device)
+        done_batch = torch.FloatTensor(batch.done).to(self.device)
+
+        # 4. Compute Q(s, a) - The Agent's Prediction
+        # We pass the state batch through the policy net.
+        # .gather(1, action_batch) picks ONLY the Q-value for the action we actually took.
+        state_action_values = self.policy_net(state_batch).gather(1, action_batch).squeeze(1)
+
+        # 5. Compute V(s') - The Target Value
+        # We use the Target Network to predict the best future value.
+        with torch.no_grad():
+            # max(1)[0] gives the max Q-value for the next state
+            next_state_values = self.target_net(next_state_batch).max(1)[0]
+
+        # 6. Compute Expected Q = Reward + Gamma * V(s')
+        # If done is 1, (1-done) becomes 0, so future value is ignored (correct for game over).
+        expected_state_action_values = reward_batch + (self.gamma * next_state_values * (1 - done_batch))
+
+        # 7. Compute Loss
+        # We use SmoothL1Loss (Huber Loss) which is stable for RL
+        criterion = nn.SmoothL1Loss()
+        loss = criterion(state_action_values, expected_state_action_values)
+
+        # 8. Optimize the Model
+        self.optimizer.zero_grad()  # Clear old gradients
+        loss.backward()  # Calculate new gradients
+        # Clip gradients to prevent exploding gradients (stability trick)
+        for param in self.policy_net.parameters():
+            param.grad.data.clamp_(-1, 1)
+        self.optimizer.step()  # Update weights
+
+    def update_epsilon(self):
+        """Decay exploration rate"""
+        if self.epsilon > self.epsilon_min:
+            self.epsilon *= self.epsilon_decay
+
+    def update_target_network(self):
+        """Copy weights from Policy Net to Target Net"""
+        self.target_net.load_state_dict(self.policy_net.state_dict())
 
 class RLGNNAgent(BaseAgent):
     """

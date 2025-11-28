@@ -126,15 +126,18 @@ class MainWindow(QWidget):
 
         self.btn_agent_dql = QPushButton('DQL')
         self.btn_agent_mcts = QPushButton('MCTS (stub)')
+        self.btn_agent_dqn = QPushButton('DQN Agent (Trained)')
         self.btn_agent_rl = QPushButton('RL-GNN (stub)')
         
         self.btn_agent_dql.clicked.connect(lambda: self._set_agent('rand'))
         self.btn_agent_mcts.clicked.connect(lambda: self._set_agent('mcts'))
+        self.btn_agent_dqn.clicked.connect(lambda: self._set_agent('dqn'))
         self.btn_agent_rl.clicked.connect(lambda: self._set_agent('rl'))
         right.addWidget(self.btn_agent_heur)
         right.addWidget(self.btn_agent_dql)
         right.addWidget(self.btn_agent_mcts)
         right.addWidget(self.btn_agent_rl)
+        right.addWidget(self.btn_agent_dqn)
 
         # Simulation controls (kept exactly like your original UI)
         right.addWidget(QLabel('Simulation'))
@@ -294,6 +297,9 @@ class MainWindow(QWidget):
         elif which == 'rl':
             self.agent = RLAgent()
             self.log.append('Switched to RL-GNN (stub) agent')
+        elif which == 'dqn':
+            self.agent = RLDQLAgent(self.env)
+            self.log.append('Switched to Deep Q-Network (DQN) agent')
         else:
             self.log.append('Unknown agent selection')
 
