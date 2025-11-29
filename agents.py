@@ -285,7 +285,7 @@ class RLDQLAgent(BaseAgent):
         self.gamma = 0.99  # Discount factor (Future vs Now)
         self.target_update = 10  # Update target net every 10 episodes
         import os
-        model_path = 'models/dqn_policy.pth'
+        model_path = 'models/dqn_baseline.pth'
 
         if os.path.exists(model_path):
             # 1. Load the weights from the file
@@ -294,8 +294,6 @@ class RLDQLAgent(BaseAgent):
             # 2. Set to Evaluation Mode (tells PyTorch we are not training)
             self.policy_net.eval()
 
-            # 3. CRITICAL: Turn off Randomness!
-            # We want to show off the learned strategy, not explore.
             self.epsilon = 0.0
 
             print(f"✅ Loaded trained model from {model_path}")
@@ -304,7 +302,6 @@ class RLDQLAgent(BaseAgent):
 
 
     def getAction(self, state: Dict, budget: int) -> List[int]:
-        # TODO: implement Q-network forward pass; for now random fallback
         if self.env is None:
             raise RuntimeError("RLDQLAgent requires env reference")
         # 1. Identify valid (susceptible) nodes

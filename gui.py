@@ -124,17 +124,15 @@ class MainWindow(QWidget):
         self.btn_agent_heur.clicked.connect(lambda: self._set_agent('heur'))
         right.addWidget(self.btn_agent_heur)
 
-        self.btn_agent_dql = QPushButton('DQL')
-        self.btn_agent_mcts = QPushButton('MCTS (stub)')
+        self.btn_agent_mcts = QPushButton('MCTS')
         self.btn_agent_dqn = QPushButton('DQN Agent (Trained)')
         self.btn_agent_rl = QPushButton('RL-GNN (stub)')
-        
-        self.btn_agent_dql.clicked.connect(lambda: self._set_agent('rand'))
+
         self.btn_agent_mcts.clicked.connect(lambda: self._set_agent('mcts'))
         self.btn_agent_dqn.clicked.connect(lambda: self._set_agent('dqn'))
         self.btn_agent_rl.clicked.connect(lambda: self._set_agent('rl'))
+
         right.addWidget(self.btn_agent_heur)
-        right.addWidget(self.btn_agent_dql)
         right.addWidget(self.btn_agent_mcts)
         right.addWidget(self.btn_agent_rl)
         right.addWidget(self.btn_agent_dqn)
@@ -288,9 +286,6 @@ class MainWindow(QWidget):
         if which == 'heur':
             self.agent = HeuristicAgent(self.env)
             self.log.append('Switched to Heuristic agent')
-        elif which == 'rand':
-            self.agent = RLDQLAgent()
-            self.log.append('Switched to DQL agent')
         elif which == 'mcts':
             self.agent = MCTSAgent(self.env)
             self.log.append('Switched to MCTS (stub) agent')

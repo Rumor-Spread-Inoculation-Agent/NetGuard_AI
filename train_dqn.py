@@ -3,7 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from tqdm import tqdm  # Progress bar
 import os
-
+import random
 from environment import RumorEnv
 from agents import RLDQLAgent
 
@@ -16,7 +16,7 @@ def train():
 
     # Setup Environment and Agent
     # Note: We use the same parameters as your GUI defaults
-    env = RumorEnv(n_nodes=120, m_edges=2, p_infect=0.05, daily_budget=5)
+    env = RumorEnv(n_nodes=120, m_edges=2, p_infect=0.15, daily_budget=5)
     agent = RLDQLAgent(env)
 
     # Logging for plots
@@ -27,8 +27,13 @@ def train():
     print(f"🚀 Starting Training on {agent.device}...")
 
     # --- TRAINING LOOP ---
-    # tqdm creates a nice progress bar
+    # tqdm is used for a progress bar during training
     for episode in tqdm(range(NUM_EPISODES)):
+
+        # domain randomization so that the agent performs reasonably when the probability of infection is altered
+        # in the simulator
+        current_difficulty = random.uniform(0.05, 0.30)
+        env.p_infect = current_difficulty
 
         # 1. Reset Env
         state_dict = env.reset()
@@ -101,7 +106,7 @@ def train():
     # --- SAVE THE MODEL ---
     if not os.path.exists('models'):
         os.makedirs('models')
-    torch.save(agent.policy_net.state_dict(), 'models/dqn_policy.pth')
+    torch.save(agent.policy_net.state_dict(), 'models/dqn_baseline.pth')
     print("\n💾 Model saved to models/dqn_policy.pth")
 
     # --- PLOTTING RESULTS ---
