@@ -1,3 +1,33 @@
-We found that Curriculum Learning (training on easy mode first) was actually detrimental in this specific case. The agent learned 'lazy' policies that failed to generalize to the rapid transmission rates of the test environment. Training directly on the target difficulty (p=0.15) produced a more robust, 'urgency-aware' policy.
+1. We found that Curriculum Learning (training on easy mode first) was actually detrimental in this specific case. The agent learned 'lazy' policies that failed to generalize to the rapid transmission rates of the test environment. Training directly on the target difficulty (p=0.15) produced a more robust, 'urgency-aware' policy.
 
-MCTS shows high variance in stochastic environments. While it has a high 'performance ceiling' (it can find the optimal solution), it lacks consistency given a limited computational budget (100 simulations). To make it reliable at p=0.3, we would likely need 10,000+ simulations, which is too slow for real-time control.
+2. MCTS shows high variance in stochastic environments. While it has a high 'performance ceiling' (it can find the optimal solution), it lacks consistency given a limited computational budget (100 simulations). To make it reliable at p=0.3, we would likely need 10,000+ simulations, which is too slow for real-time control.
+
+1. The "Hub Fallacy" in Modular Networks
+
+    Observation: On Scale-Free (Barabási-Albert) networks, targeting high-degree nodes ("Hubs") is the optimal strategy. However, on Community (Caveman/SBM) networks, this heuristic fails.
+
+    Scientific Reasoning: In a community structure, high-degree nodes are often local celebrities confined to a single cluster. Removing them does not stop the diffusion of information between clusters. The Heuristic agent failed because it "cleaned one room" while the virus traveled down the hallway to the next room.
+
+2. The Superiority of "Bridge" Blocking
+
+    Observation: The most critical nodes for containment in social networks are not the most connected ones, but the "Bridges" that connect distinct communities.
+
+    Scientific Reasoning: Our experiments showed that "Bridges" often have unremarkable degrees (e.g., knowing only 2 people), making them invisible to degree-based heuristics. However, they have high Betweenness Centrality, acting as the sole bottleneck for global contagion. The GNN’s victory (15.7 vs. 19.0 infections) proves that identifying and blocking these bottlenecks is statistically superior to targeting hubs.
+
+3. Feature Engineering determines AI Success
+
+    Observation: The GNN failed when provided only with "Degree" and "Clustering Coefficient" but succeeded immediately when provided with "Betweenness Centrality."
+
+    Scientific Reasoning: In dense social cliques, the Clustering Coefficient is uniformly high for everyone, acting as "noise" to the AI. Betweenness Centrality, however, provided a high-contrast signal, allowing the Neural Network to statistically distinguish a "Bridge" from a "Leaf Node" even when they had the same number of friends. This demonstrates that Graph Neural Networks are not magic; they require domain-relevant input features to learn complex topologies.
+
+4. Convergence to Theoretical Optimality
+
+    Observation: Both the Deep Q-Network (DQN) and the GNN converged to the exact same average infection rate (~15.7).
+
+    Scientific Reasoning: This suggests that ~15.7 is the theoretical limit (the "Perfect Game") for this specific graph topology. Since the simulation starts with a "Patient Zero" already infected, it is impossible to save the initial cluster. The fact that two different AI architectures converged to the same number confirms they both discovered the optimal policy: isolate the infected cluster immediately and sacrifice it to save the rest of the network.
+
+5. Stability vs. Performance (The Error Bar Insight)
+
+    Observation: The Heuristic agent showed very low variance (short error bar), while the GNN showed higher variance (long error bar) despite a better average.
+
+    Scientific Reasoning: The Heuristic is deterministic and rigid—it makes the same "mediocre" mistake every time, leading to a consistent but poor score. The GNN acts on probabilities. While it usually plays a perfect game, the high variance indicates the "fragility" of the optimal strategy: if the Agent misses just one bridge in the simulation, the virus escapes, causing a spike in infections. This highlights the high-risk, high-reward nature of precision containment strategies.

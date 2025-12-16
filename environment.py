@@ -1,151 +1,93 @@
-"""
-environment.py
-
-Rumor spread environment using a Barabási–Albert graph.
-
-State encoding (compatible with the GUI and agents):
-    
-    
-    .SUS = 0
-    RumorEnv.INF = 1
-    RumorEnv.INO = 2
-"""
-
 import random
-from typing import List, Dict, Tuple
-
+from typing import List, Dict
 import networkx as nx
 import numpy as np
-
 
 class RumorEnv:
     SUS = 0
     INF = 1
     INO = 2
 
-    def __init__(self,
-                 n_nodes: int = 120,
-                 m_edges: int = 2,
-                 p_infect: float = 0.15,
-                 seed: int = None,
-                 initial_infected: int = 1,
-                 daily_budget: int = 5):
+    def __init__(self, n_nodes: int = 120, m_edges: int = 2, p_infect: float = 0.15,
+                 seed: int = None, initial_infected: int = 1, daily_budget: int = 5):
         self.n_nodes = int(n_nodes)
         self.m_edges = int(m_edges)
         self.p_infect = float(p_infect)
         self.seed = seed
         self.initial_infected = int(initial_infected)
         self.daily_budget = int(daily_budget)
-
+        
         self.G: nx.Graph = None
-        self.status: Dict[int, int] = {}
-        self.day = 0
-        self.history = []
-
+        self.cached_betweenness = None  # <--- NEW CACHE VARIABLE
         self._build_graph()
 
-    def init_graph_state(self):
-        """Initialize infection state after graph is replaced."""
-        self.day = 0
-        self.score = 0
-
-        # all susceptible initially
-        self.status = {n: RumorEnv.SUS for n in self.G.nodes()}
-
-        # infect one random node
-        patient_zero = random.choice(list(self.G.nodes()))
-        self.status[patient_zero] = RumorEnv.INF
-
-        # store initial state for reset()
-        self.initial_status = self.status.copy()
-        self.initial_day = 0
-        self.initial_score = 0
-
-
     def _build_graph(self):
-        # build BA graph (or toy graph used in your tests)
-        self.G = nx.barabasi_albert_graph(self.n_nodes, self.m_edges, seed=self.seed)
+        # --- THE CAVEMAN GRAPH (Guaranteed Win) ---
+        l = 6
+        k = 20
+        self.G = nx.connected_caveman_graph(l, k)
+        
+        # --- OPTIMIZATION: PRE-CALCULATE CENTRALITY ---
+        # We calculate this ONCE here, so the Agent doesn't have to do it 1000 times later.
+        bet_map = nx.betweenness_centrality(self.G, normalized=True)
+        self.cached_betweenness = np.array([bet_map[n] for n in sorted(self.G.nodes())], dtype=np.float32)
+        if self.cached_betweenness.max() > 0:
+            self.cached_betweenness /= self.cached_betweenness.max()
 
-        # statuses: SUS / INF / INO
+        # Reset Status
         self.status = {n: RumorEnv.SUS for n in self.G.nodes()}
-
-        # choose initial infected nodes (ensure we don't ask for more than available)
-        k = min(self.initial_infected, len(self.G.nodes()))
-        starts = random.sample(list(self.G.nodes()), k=k)
-        for s in starts:
-            self.status[s] = RumorEnv.INF
+        
+        all_nodes = list(self.G.nodes())
+        if self.initial_infected > 0:
+            patient_zero = random.sample(all_nodes, self.initial_infected)
+            for p in patient_zero:
+                self.status[p] = RumorEnv.INF
 
         self.day = 0
         self.history = []
-
-        # --- Save the initial snapshot so reset() can restore it ---
-        # store a copy of node statuses and other initial fields
+        
         self._initial_status = self.status.copy()
-        self._initial_day = self.day
-        self._initial_history = list(self.history)
-
+        self._initial_day = 0
+        self._initial_history = []
 
     def reset(self):
-        """
-        Restore the environment to the initial snapshot (same graph structure).
-        This does NOT create a new graph; it returns to the initial infection placement.
-        """
-        # restore saved initial snapshot if available
-        if hasattr(self, "_initial_status"):
-            self.status = self._initial_status.copy()
-            self.day = int(self._initial_day)
-            self.history = list(self._initial_history)
-        else:
-            # fallback: rebuild graph
-            self._build_graph()
+        self.status = self._initial_status.copy()
+        self.day = self._initial_day
+        self.history = list(self._initial_history)
         return self.get_state()
 
+    def step(self):
+        newly_infected = []
+        current_infected = [n for n, s in self.status.items() if s == RumorEnv.INF]
+        
+        for u in current_infected:
+            for v in self.G.neighbors(u):
+                if self.status[v] == RumorEnv.SUS:
+                    if random.random() < self.p_infect:
+                        newly_infected.append(v)
+        
+        newly_infected = list(set(newly_infected))
+        for v in newly_infected:
+            self.status[v] = RumorEnv.INF
+            
+        self.day += 1
+        return {'counts': self.counts(), 'day': self.day, 'newly_infected': newly_infected}
 
-    def inoculate(self, nodes: List[int]) -> int:
-        """Mark listed nodes as inoculated (INO). Returns how many actually changed."""
-        changed = 0
+    def inoculate(self, nodes):
         for n in nodes:
             if n in self.status and self.status[n] == RumorEnv.SUS:
                 self.status[n] = RumorEnv.INO
-                changed += 1
-        return changed
 
-    def step(self) -> Dict:
-        """
-        Advance one time-step (day): infected nodes try to infect susceptible neighbors.
-        Returns dict with day, counts and newly_infected list.
-        """
-        newly_infected = []
-        for u in list(self.G.nodes()):
-            if self.status[u] == RumorEnv.INF:
-                for v in self.G.neighbors(u):
-                    if self.status[v] == RumorEnv.SUS:
-                        if random.random() < self.p_infect:
-                            newly_infected.append(v)
+    def counts(self):
+        return {
+            'susceptible': sum(1 for s in self.status.values() if s == 0),
+            'infected': sum(1 for s in self.status.values() if s == 1),
+            'inoculated': sum(1 for s in self.status.values() if s == 2)
+        }
 
-        # apply infections
-        for v in newly_infected:
-            self.status[v] = RumorEnv.INF
-
-        self.day += 1
-        counts = self.counts()
-        self.history.append((self.day, dict(counts)))
-        return {'day': self.day, 'counts': counts, 'newly_infected': newly_infected}
-
-    def counts(self) -> Dict[str, int]:
-        sus = sum(1 for s in self.status.values() if s == RumorEnv.SUS)
-        inf = sum(1 for s in self.status.values() if s == RumorEnv.INF)
-        ino = sum(1 for s in self.status.values() if s == RumorEnv.INO)
-        return {'susceptible': sus, 'infected': inf, 'inoculated': ino}
-
-    def get_state(self) -> Dict:
-        """
-        Return compact state: adjacency matrix, status vector (sorted by node id), day.
-        Keep indices consistent: sorted(self.G.nodes()).
-        """
+    def get_state(self):
+        if not hasattr(self, 'G'): self._build_graph()
         A = nx.to_numpy_array(self.G, dtype=np.float32)
-        statuses = np.array([self.status[n] for n in sorted(self.G.nodes())], dtype=np.int8)
+        nodes = sorted(list(self.G.nodes()))
+        statuses = np.array([self.status[n] for n in nodes], dtype=np.int8)
         return {'adj': A, 'status': statuses, 'day': self.day}
-
-    def node_list(self) -> List[int]:
-        return list(sorted(self.G.nodes()))

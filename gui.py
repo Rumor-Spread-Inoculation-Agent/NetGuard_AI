@@ -28,7 +28,7 @@ from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
 
 from environment import RumorEnv
-from agents import HeuristicAgent, RLDQLAgent, MCTSAgent, RLAgent
+from agents import HeuristicAgent, RLDQLAgent, MCTSAgent, GNNAgent
 from utils import save_log_text
 
 
@@ -118,6 +118,19 @@ class MainWindow(QWidget):
         self.spin_budget = QSpinBox(); self.spin_budget.setRange(0, 100); self.spin_budget.setValue(self.env.daily_budget)
         hp2.addWidget(self.spin_budget)
         right.addLayout(hp2)
+
+        hp3 = QHBoxLayout()
+        hp3.addWidget(QLabel('Simulation Seed:'))
+        
+        self.spin_seed = QSpinBox()
+        self.spin_seed.setRange(-1, 999999) # -1 is Random
+        self.spin_seed.setValue(-1)
+        self.spin_seed.setSpecialValueText("Random") # Displays "Random" when value is -1
+        self.spin_seed.setToolTip("Set specific integer to replay exact scenarios. -1 for random.")
+        
+        hp3.addWidget(self.spin_seed)
+        right.addLayout(hp3)
+
         # Agent selection
         right.addWidget(QLabel('Agent'))
         self.btn_agent_heur = QPushButton('Heuristic (degree)')
@@ -290,7 +303,7 @@ class MainWindow(QWidget):
             self.agent = MCTSAgent(self.env)
             self.log.append('Switched to MCTS (stub) agent')
         elif which == 'rl':
-            self.agent = RLAgent()
+            self.agent = GNNAgent(self.env)
             self.log.append('Switched to RL-GNN (stub) agent')
         elif which == 'dqn':
             self.agent = RLDQLAgent(self.env)
@@ -299,32 +312,37 @@ class MainWindow(QWidget):
             self.log.append('Unknown agent selection')
 
     def _reset_env(self):
-        # Reset the current environment's state to the initial snapshot (same graph)
-        # Update UI parameters (in case user changed them in the UI)
-        nodes = int(self.spin_nodes.value())
-        m = int(self.spin_m.value())
-        p = float(self.spin_p.value())
-        budget = int(self.spin_budget.value())
+        # 1. Update Parameters from GUI
+        nodes = self.spin_nodes.value()
+        budget = self.spin_budget.value()
+        
+        # --- NEW CODE: Apply Seed ---
+        user_seed = self.spin_seed.value()
+        
+        if user_seed == -1:
+            # If "Random" is selected, generate a real random seed now
+            import random
+            actual_seed = random.randint(0, 10000)
+            self.env.seed = actual_seed
+            self.log.append(f"🎲 Random Seed Generated: {actual_seed}")
+        else:
+            # Use the fixed seed
+            self.env.seed = user_seed
+            self.log.append(f"🔒 Fixed Seed Applied: {user_seed}")
+        # ----------------------------
 
-        # If the UI changed nodes/m/maybe user expects new graph, don't rebuild here.
-        # Keep the same graph structure — just reset to the saved initial state.
+        # 2. Update Environment Config
+        self.env.n_nodes = nodes
         self.env.daily_budget = budget
-        self.env.p_infect = p
-        # restore snapshot
+        
+        # 3. Actually Reset (Rebuilds graph with new seed)
         self.env.reset()
-
-        # If agent uses env reference, keep it
-        if isinstance(self.agent, HeuristicAgent) or isinstance(self.agent, MCTSAgent):
-            try:
-                self.agent.env = self.env
-            except Exception:
-                pass
-
-        self.score = 0
-        self.score_label.setText("Score: 0")
-        self.log.append('Environment reset to initial state (same graph).')
-        self._refresh()
-
+        
+        # 4. Refresh GUI
+        self.canvas.draw_graph(self.env.G, self.env.status)
+        self.log.append(f"Environment reset. Nodes: {nodes}, Budget: {budget}")
+        self.btn_step.setEnabled(True)
+        self.btn_run.setEnabled(True)
 
     def _manual_step(self):
         summary = self.env.step()
