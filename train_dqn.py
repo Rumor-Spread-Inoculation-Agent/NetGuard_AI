@@ -23,7 +23,7 @@ def train():
     infected_history = []
     epsilon_history = []
 
-    print(f"🚀 Starting Training on {agent.device}...")
+    print(f"Starting Training on {agent.device}...")
 
     # --- TRAINING LOOP ---
     # tqdm is used for a progress bar during training
@@ -96,7 +96,7 @@ def train():
     if not os.path.exists('models'):
         os.makedirs('models')
     torch.save(agent.policy_net.state_dict(), 'models/dqn_baseline.pth')
-    print("\n💾 Model saved to models/dqn_policy.pth")
+    print("\nModel saved to models/dqn_policy.pth")
 
     # --- PLOTTING RESULTS ---
     plot_results(rewards_history, epsilon_history)
@@ -122,7 +122,7 @@ def plot_results(rewards, epsilons):
 
     plt.tight_layout()
     plt.savefig('training_results.png')
-    print("📊 Graphs saved to training_results.png")
+    print("Graphs saved to training_results.png")
     plt.show()
 
 

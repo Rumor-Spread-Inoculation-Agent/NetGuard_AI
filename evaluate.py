@@ -21,7 +21,7 @@ def seed_everything(seed=42):
         torch.cuda.manual_seed_all(seed)
 
 def run_agent(agent_cls, env, episodes, name):
-    print(f"⚔️ Testing {name} ({episodes} eps)...")
+    print(f"Testing {name} ({episodes} eps)...")
     final_infections = []
     
     for _ in tqdm(range(episodes)):
@@ -96,7 +96,7 @@ def evaluate():
                  f'{height:.1f}', ha='center', va='bottom', fontweight='bold')
         
     plt.savefig('final_victory_plot.png')
-    print("\n✅ Comparison saved to final_victory_plot.png")
+    print("\nComparison saved to final_victory_plot.png")
 
 if __name__ == "__main__":
     seed_everything(42)

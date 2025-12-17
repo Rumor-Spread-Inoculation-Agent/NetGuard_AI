@@ -38,8 +38,8 @@ def train():
     rewards_history = []
     loss_history = []
     
-    print(f"🚀 Training GNN on COMMUNITY Graph...")
-    print(f"🎯 Nodes: {TRAIN_NODES} | p_infect: {MIN_P}-{MAX_P}")
+    print(f"Training GNN on COMMUNITY Graph...")
+    print(f"Nodes: {TRAIN_NODES} | p_infect: {MIN_P}-{MAX_P}")
     
     for episode in tqdm(range(NUM_EPISODES)):
         # Randomize Difficulty
@@ -119,7 +119,7 @@ def train():
     if not os.path.exists('models'):
         os.makedirs('models')
     torch.save(agent.policy_net.state_dict(), 'models/gnn_policy.pth')
-    print("✅ Community-Killer Model Saved to models/gnn_policy.pth")
+    print("Model Saved to models/gnn_policy.pth")
 
     # Plot
     plt.figure(figsize=(10,4))

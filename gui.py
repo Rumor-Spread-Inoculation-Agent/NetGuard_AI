@@ -265,10 +265,10 @@ class MainWindow(QWidget):
             import random
             actual_seed = random.randint(0, 10000)
             self.env.seed = actual_seed
-            self.log.append(f"🎲 Random Seed Generated: {actual_seed}")
+            self.log.append(f"Random Seed Generated: {actual_seed}")
         else:
             self.env.seed = user_seed
-            self.log.append(f"🔒 Fixed Seed Applied: {user_seed}")
+            self.log.append(f"Fixed Seed Applied: {user_seed}")
 
         self.env.n_nodes = nodes
         self.env.daily_budget = budget

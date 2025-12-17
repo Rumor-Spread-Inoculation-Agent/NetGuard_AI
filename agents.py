@@ -305,9 +305,9 @@ class RLDQLAgent(BaseAgent):
 
             self.epsilon = 0.0
 
-            print(f"✅ Loaded trained model from {model_path}")
+            print(f"Loaded trained model from {model_path}")
         else:
-            print(f"⚠️ No trained model found at {model_path}. Running with random weights.")
+            print(f"No trained model found at {model_path}. Running with random weights.")
 
 
     def getAction(self, state: Dict, budget: int) -> List[int]:
@@ -467,15 +467,15 @@ class GNNAgent:
                     self.policy_net.load_state_dict(state_dict)
                     self.target_net.load_state_dict(self.policy_net.state_dict())
                     self.epsilon = 0.0
-                    print(f"✅ GNN Agent loaded from {model_path}")
+                    print(f"GNN Agent loaded from {model_path}")
                 else:
-                    print("⚠️ Model dimension mismatch (New Features). Retraining from scratch.")
+                    print("Model dimension mismatch (New Features). Retraining from scratch.")
                     self.epsilon = 1.0
             except Exception as e:
-                print(f"⚠️ Could not load GNN model: {e}")
+                print(f"Could not load GNN model: {e}")
                 self.epsilon = 1.0
         else:
-            print("⚠️ No trained GNN model found. Agent will be random unless trained.")
+            print("No trained GNN model found. Agent will be random unless trained.")
             self.epsilon = 1.0
 
         self.epsilon_min = 0.01

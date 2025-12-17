@@ -27,9 +27,6 @@ class RumorEnv:
         k = 20
         self.G = nx.connected_caveman_graph(l, k)
         
-
-        # Recalculate Centrality
-        bet_map = nx.betweenness_centrality(self.G, normalized=True)
         # --- PRE-CALCULATE CENTRALITY ---
         # We calculate this ONCE here, so the Agent doesn't have to do it 1000 times later.
         bet_map = nx.betweenness_centrality(self.G, normalized=True)

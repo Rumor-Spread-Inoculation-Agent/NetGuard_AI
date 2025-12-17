@@ -25,16 +25,6 @@ class ReplayBuffer:
 
     def __len__(self):
         return len(self.buffer)
-
-# LOGGING UTILITY (Needed for GUI) ---
-def save_log_text(text, filename="rumor_log.txt"):
-    """Saves the text from the GUI log to a file."""
-    try:
-        with open(filename, "w", encoding='utf-8') as f:
-            f.write(text)
-        print(f"Log saved to {filename}")
-    except Exception as e:
-        print(f"Error saving log: {e}")
     
 def current_time_str():
     return datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
