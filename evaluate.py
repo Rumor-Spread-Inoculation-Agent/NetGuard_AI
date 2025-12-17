@@ -8,8 +8,8 @@ from agents import HeuristicAgent, RandomAgent, GNNAgent, RLDQLAgent
 
 # --- CONFIGURATION ---
 NODES = 120
-EDGES = 2       # Ignored by Community model
-TEST_P = 0.15   # <--- FAIR DIFFICULTY (Was 0.3)
+EDGES = 2     
+TEST_P = 0.15   
 BUDGET = 10
 EPISODES = 50   # Samples per agent
 

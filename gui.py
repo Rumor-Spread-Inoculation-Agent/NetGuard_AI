@@ -2,12 +2,6 @@
 gui.py
 
 PyQt5 GUI for Rumor Control Simulator.
-Control panel matches your original layout; added:
- - Save Log button
- - Clear Log button
- - User-as-Agent section placed below Simulation buttons
- - Larger log area
- - Node numbering toggle
 """
 
 import sys
@@ -28,9 +22,8 @@ from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
 
 from environment import RumorEnv
-from agents import HeuristicAgent, RLDQLAgent, MCTSAgent, GNNAgent
+from agents import HeuristicAgent, RLDQLAgent, MCTSAgent, GNNAgent, RandomAgent
 from utils import save_log_text
-
 
 class NetworkCanvas(FigureCanvas):
     def __init__(self, parent=None, width=100, height=130, dpi=100):
@@ -50,16 +43,15 @@ class NetworkCanvas(FigureCanvas):
         for n in sorted(G.nodes()):
             st = status[n]
             if st == RumorEnv.SUS:
-                color_map.append("#78d2e9")   # very light blue for susceptible/unvisited
-                sizes.append(500)             # bigger size
+                color_map.append("#78d2e9")   # Susceptible (Blue)
+                sizes.append(500)
             elif st == RumorEnv.INF:
-                color_map.append("red")
+                color_map.append("red")       # Infected (Red)
                 sizes.append(600)
-            else:  # cured/inoculated
-                color_map.append("green")
+            else:
+                color_map.append("green")     # Inoculated (Green)
                 sizes.append(550)
 
-        # Draw edges slightly darker for contrast
         nx.draw_networkx_edges(G, pos, ax=self.ax, edge_color="#454b7e", alpha=0.6)
         nx.draw_networkx_nodes(G, pos, node_color=color_map, node_size=sizes, ax=self.ax)
 
@@ -75,7 +67,7 @@ class MainWindow(QWidget):
     def __init__(self):
         super().__init__()
         self.setWindowTitle('Rumor Control Simulator')
-        # default env (match initial code defaults)
+        # Default environment
         self.env = RumorEnv(n_nodes=120, m_edges=2, p_infect=0.15, initial_infected=1, daily_budget=5)
         self.agent = HeuristicAgent(self.env)
         self.timer = QtCore.QTimer()
@@ -89,16 +81,15 @@ class MainWindow(QWidget):
     def _init_ui(self):
         main_layout = QHBoxLayout()
 
-        # Left: canvas
+        # Left: Canvas
         self.canvas = NetworkCanvas(self, width=6, height=6)
         main_layout.addWidget(self.canvas, 3)
 
-        # Right: controls
+        # Right: Controls
         right = QVBoxLayout()
-        # parameters header
         right.addWidget(QLabel('Parameters'))
 
-        # Row: Nodes & m edges
+        # Row 1: Nodes & Edges
         hp = QHBoxLayout()
         hp.addWidget(QLabel('Nodes:'))
         self.spin_nodes = QSpinBox(); self.spin_nodes.setRange(10, 2000); self.spin_nodes.setValue(self.env.n_nodes)
@@ -108,7 +99,7 @@ class MainWindow(QWidget):
         hp.addWidget(self.spin_m)
         right.addLayout(hp)
 
-        # Row: infect p & daily budget
+        # Row 2: Probability & Budget
         hp2 = QHBoxLayout()
         hp2.addWidget(QLabel('Infect p:'))
         self.spin_p = QDoubleSpinBox(); self.spin_p.setRange(0.0, 1.0); self.spin_p.setSingleStep(0.01)
@@ -119,61 +110,58 @@ class MainWindow(QWidget):
         hp2.addWidget(self.spin_budget)
         right.addLayout(hp2)
 
+        # Row 3: Seed
         hp3 = QHBoxLayout()
         hp3.addWidget(QLabel('Simulation Seed:'))
-        
         self.spin_seed = QSpinBox()
-        self.spin_seed.setRange(-1, 999999) # -1 is Random
+        self.spin_seed.setRange(-1, 999999)
         self.spin_seed.setValue(-1)
-        self.spin_seed.setSpecialValueText("Random") # Displays "Random" when value is -1
-        self.spin_seed.setToolTip("Set specific integer to replay exact scenarios. -1 for random.")
-        
+        self.spin_seed.setSpecialValueText("Random")
         hp3.addWidget(self.spin_seed)
         right.addLayout(hp3)
 
-        # Agent selection
-        right.addWidget(QLabel('Agent'))
-        self.btn_agent_heur = QPushButton('Heuristic (degree)')
-        self.btn_agent_heur.clicked.connect(lambda: self._set_agent('heur'))
-        right.addWidget(self.btn_agent_heur)
-
+        # --- AGENT SELECTION ---
+        right.addWidget(QLabel('Select Agent:'))
+        
+        self.btn_agent_heur = QPushButton('Heuristic (Degree)')
+        self.btn_agent_rand = QPushButton('Random Agent')
         self.btn_agent_mcts = QPushButton('MCTS')
         self.btn_agent_dqn = QPushButton('DQN Agent (Trained)')
-        self.btn_agent_rl = QPushButton('RL-GNN (stub)')
+        self.btn_agent_rl = QPushButton('RL-GNN')
 
+        self.btn_agent_heur.clicked.connect(lambda: self._set_agent('heur'))
+        self.btn_agent_rand.clicked.connect(lambda: self._set_agent('rand'))
         self.btn_agent_mcts.clicked.connect(lambda: self._set_agent('mcts'))
         self.btn_agent_dqn.clicked.connect(lambda: self._set_agent('dqn'))
         self.btn_agent_rl.clicked.connect(lambda: self._set_agent('rl'))
 
         right.addWidget(self.btn_agent_heur)
+        right.addWidget(self.btn_agent_rand)
         right.addWidget(self.btn_agent_mcts)
         right.addWidget(self.btn_agent_rl)
         right.addWidget(self.btn_agent_dqn)
 
-        # Simulation controls (kept exactly like your original UI)
-        right.addWidget(QLabel('Simulation'))
+        # --- SIMULATION CONTROL ---
+        right.addWidget(QLabel('Simulation Control'))
         self.btn_reset = QPushButton('Reset Environment')
         self.btn_new_env = QPushButton("New Environment")
-        self.btn_step = QPushButton('Step (one day)')
         self.btn_run = QPushButton('Run (auto)')
         self.btn_stop = QPushButton('Stop')
         self.btn_run_agent_step = QPushButton('Agent: inoculate & step')
 
         self.btn_reset.clicked.connect(self._reset_env)
         self.btn_new_env.clicked.connect(self.new_environment)
-        self.btn_step.clicked.connect(self._manual_step)
         self.btn_run.clicked.connect(self._start_auto)
         self.btn_stop.clicked.connect(self._stop_auto)
         self.btn_run_agent_step.clicked.connect(self._agent_action_and_step)
 
         right.addWidget(self.btn_reset)
         right.addWidget(self.btn_new_env)
-        right.addWidget(self.btn_step)
         right.addWidget(self.btn_run)
         right.addWidget(self.btn_stop)
         right.addWidget(self.btn_run_agent_step)
         
-        # User plays as agent (placed below Simulation buttons per your choice)
+        # User plays as agent
         right.addWidget(QLabel('User (play as Agent) - enter node numbers comma-separated:'))
         user_h = QHBoxLayout()
         self.user_input = QLineEdit()
@@ -183,12 +171,11 @@ class MainWindow(QWidget):
         user_h.addWidget(self.btn_user_play)
         right.addLayout(user_h)
 
-        # Logging area and buttons
+        # Logging area
         right.addWidget(QLabel('Log'))
-        # bigger log area
         self.log = QTextEdit()
         self.log.setReadOnly(True)
-        self.log.setMaximumHeight(360)   # increased size
+        self.log.setMaximumHeight(360)
         right.addWidget(self.log)
 
         # Log buttons
@@ -201,89 +188,45 @@ class MainWindow(QWidget):
         log_h.addWidget(self.btn_save_log)
         right.addLayout(log_h)
 
-        # status
+        # Status & Score
         self.status_label = QLabel('Day: 0 | S:0 I:0 R:0')
         self.score_label = QLabel('Score: 0')
         right.addWidget(self.score_label)
         right.addWidget(self.status_label)
 
-        # checkbox for showing node ids (slow)
+        # Checkbox
         self.check_show_ids = QCheckBox('Show node ids (slow)')
-        self.check_show_ids.stateChanged.connect(self._refresh)  # redraw when toggled
+        self.check_show_ids.stateChanged.connect(self._refresh)
         right.addWidget(self.check_show_ids)
 
-        # spacer
         right.addStretch()
         main_layout.addLayout(right, 1)
 
         self.setLayout(main_layout)
 
     def new_environment(self):
-        """
-        Create a brand new environment (new graph + initial infected) using current UI params.
-        This replaces self.env with a fresh RumorEnv instance.
-        """
         nodes = int(self.spin_nodes.value())
         m = int(self.spin_m.value())
         p = float(self.spin_p.value())
         budget = int(self.spin_budget.value())
 
-        # Instantiate a fresh environment (new graph, initial infected chosen inside)
         self.env = RumorEnv(n_nodes=nodes, m_edges=m, p_infect=p, initial_infected=1, daily_budget=budget)
 
-        # If the current agent holds an env reference, update it
+        # Update agent reference
         try:
-            if isinstance(self.agent, HeuristicAgent) or isinstance(self.agent, MCTSAgent):
+            if isinstance(self.agent, (HeuristicAgent, MCTSAgent, RandomAgent)):
                 self.agent.env = self.env
         except Exception:
             pass
 
-        # Reset UI elements
         self.score = 0
         self.score_label.setText("Score: 0")
         self.log.append("Created NEW environment (new graph).")
         self._refresh()
 
-
-
-    def run_heuristic_agent(self):
-        """Run one step using the HeuristicAgent."""
-        if not hasattr(self, 'env'):
-            self.log.append("⚠️ Environment not initialized!")
-            return
-
-        agent = HeuristicAgent(self.env)
-        state = {'status': self.env.status.copy()}
-
-        selected_nodes = agent.getAction(state, budget=self.env.daily_budget)
-        self.env.inoculate(selected_nodes)
-
-        self.log.append(f"Heuristic agent inoculated nodes: {selected_nodes}")
-
-        # Step the environment one day forward
-        summary = self.env.step()
-
-        # Update score and UI
-        self._update_score()
-        self._refresh()
-
-        # Log infection progress
-        self.log.append(
-            f"Day {summary['day']} → Infected: {len(summary['newly_infected'])}, "
-            #f"Cured: {len(summary['newly_cured'])}"
-        )
-
-        # Check for end of episode
-        self._check_game_over()
-
-
-
-
     def _check_game_over(self):
         counts = self.env.counts()
         total = counts['susceptible'] + counts['infected'] + counts['inoculated']
-        
-        # Stop if all nodes are either infected or inoculated (no susceptible left)
         if counts['susceptible'] == 0 or counts['infected'] + counts['inoculated'] == total:
             self.timer.stop()
             from PyQt5.QtWidgets import QMessageBox
@@ -294,86 +237,74 @@ class MainWindow(QWidget):
             return True
         return False
 
-
     def _set_agent(self, which: str):
         if which == 'heur':
             self.agent = HeuristicAgent(self.env)
-            self.log.append('Switched to Heuristic agent')
+            self.log.append('Switched to Heuristic Agent (Degree)')
+        elif which == 'rand':
+            self.agent = RandomAgent(self.env)
+            self.log.append('Switched to Random Agent')
         elif which == 'mcts':
             self.agent = MCTSAgent(self.env)
-            self.log.append('Switched to MCTS (stub) agent')
+            self.log.append('Switched to MCTS Agent')
         elif which == 'rl':
             self.agent = GNNAgent(self.env)
-            self.log.append('Switched to RL-GNN (stub) agent')
+            self.log.append('Switched to RL-GNN Agent')
         elif which == 'dqn':
             self.agent = RLDQLAgent(self.env)
-            self.log.append('Switched to Deep Q-Network (DQN) agent')
+            self.log.append('Switched to DQN Agent')
         else:
             self.log.append('Unknown agent selection')
 
     def _reset_env(self):
-        # 1. Update Parameters from GUI
         nodes = self.spin_nodes.value()
         budget = self.spin_budget.value()
-        
-        # --- NEW CODE: Apply Seed ---
         user_seed = self.spin_seed.value()
         
         if user_seed == -1:
-            # If "Random" is selected, generate a real random seed now
             import random
             actual_seed = random.randint(0, 10000)
             self.env.seed = actual_seed
             self.log.append(f"🎲 Random Seed Generated: {actual_seed}")
         else:
-            # Use the fixed seed
             self.env.seed = user_seed
             self.log.append(f"🔒 Fixed Seed Applied: {user_seed}")
-        # ----------------------------
 
-        # 2. Update Environment Config
         self.env.n_nodes = nodes
         self.env.daily_budget = budget
-        
-        # 3. Actually Reset (Rebuilds graph with new seed)
         self.env.reset()
         
-        # 4. Refresh GUI
         self.canvas.draw_graph(self.env.G, self.env.status)
         self.log.append(f"Environment reset. Nodes: {nodes}, Budget: {budget}")
-        self.btn_step.setEnabled(True)
         self.btn_run.setEnabled(True)
 
     def _manual_step(self):
+        """Keeping logic just in case, but button is removed."""
         summary = self.env.step()
         self._update_score()
         if self._check_game_over():
             return
-
         self.log.append(f"Day {summary['day']}: newly infected {len(summary['newly_infected'])} nodes")
         self._refresh()
 
     def _agent_action_and_step(self):
         budget = int(self.spin_budget.value())
         state = self.env.get_state()
-        # agents expect state and budget
         try:
             nodes = self.agent.getAction(state, budget)
         except TypeError:
-            # some stubs might expect env object; try fallback
             try:
                 nodes = self.agent.getAction(self.env)
             except Exception:
                 nodes = []
-        # Ensure nodes are valid ints in graph node space
         nodes = self._sanitize_node_list(nodes)
         changed = self.env.inoculate(nodes)
-        self.log.append(f'Inoculated {changed} nodes: {nodes}')
+        self.log.append(f'Agent inoculated {changed} nodes: {nodes}')
         summary = self.env.step()
         self._update_score()
         if self._check_game_over():
             return
-        self.log.append(f"Day {summary['day']}: newly infected {len(summary['newly_infected'])} nodes; counts: {summary['counts']}")
+        self.log.append(f"Day {summary['day']}: infected {len(summary['newly_infected'])}")
         self._refresh()
 
     def _start_auto(self):
@@ -394,13 +325,8 @@ class MainWindow(QWidget):
             self.timer.stop()
 
     def _sanitize_node_list(self, nodes) -> List[int]:
-        """Convert variety of agent outputs to valid node id list within graph nodes."""
-        if nodes is None:
-            return []
-        # If nodes is numpy array convert to list
-        if isinstance(nodes, np.ndarray):
-            nodes = nodes.tolist()
-        # If nodes is a list of floats/strings attempt to cast to int
+        if nodes is None: return []
+        if isinstance(nodes, np.ndarray): nodes = nodes.tolist()
         out = []
         for n in nodes:
             try:
@@ -409,7 +335,6 @@ class MainWindow(QWidget):
                     out.append(ni)
             except Exception:
                 continue
-        # unique & keep order
         seen = set()
         filtered = []
         for x in out:
@@ -419,22 +344,13 @@ class MainWindow(QWidget):
         return filtered
 
     def _update_score(self):
-        """
-        Compute score from scratch using:
-        score = 10 * cured_count - 5 * infected_count - 2 * days_passed
-        This does NOT accumulate; it computes fresh each time from env counts/day.
-        """
         counts = self.env.counts()
-        cured = counts.get('inoculated', 0)   # cured/inoculated count
+        cured = counts.get('inoculated', 0)
         infected = counts.get('infected', 0)
         days = int(self.env.day)
-
         score = 10 * cured - 5 * infected - 2 * days
-        # store & display
         self.score = score
         self.score_label.setText(f"Score: {self.score}")
-
-
 
     def _user_play(self):
         text = self.user_input.text()
@@ -444,8 +360,7 @@ class MainWindow(QWidget):
         parts = [p.strip() for p in text.split(',')]
         nodes = []
         for p in parts:
-            if p == '':
-                continue
+            if p == '': continue
             try:
                 n = int(p)
                 if n in self.env.G.nodes():
@@ -454,15 +369,13 @@ class MainWindow(QWidget):
                     self.log.append(f'Node {n} not in graph; ignored.')
             except ValueError:
                 self.log.append(f'Invalid node id: {p}; ignored.')
-        nodes = nodes[:self.env.daily_budget]  # enforce budget
+        nodes = nodes[:self.env.daily_budget]
         changed = self.env.inoculate(nodes)
         self.log.append(f'User inoculated {changed} nodes: {nodes}')
         summary = self.env.step()
         self._update_score()
-        if self._check_game_over():
-            return
-
-        self.log.append(f"Day {summary['day']}: newly infected {len(summary['newly_infected'])} nodes; counts: {summary['counts']}")
+        if self._check_game_over(): return
+        self.log.append(f"Day {summary['day']}: newly infected {len(summary['newly_infected'])}")
         self._refresh()
 
     def _clear_log(self):
@@ -470,7 +383,6 @@ class MainWindow(QWidget):
         self.log.append('Log cleared.')
 
     def _save_log(self):
-        # open file dialog to choose save location
         path, _ = QFileDialog.getSaveFileName(self, 'Save Log', f'rumor_log_{random.randint(0,9999)}.txt', 'Text Files (*.txt);;All Files (*)')
         if path:
             save_log_text(self.log.toPlainText(), filename=path)

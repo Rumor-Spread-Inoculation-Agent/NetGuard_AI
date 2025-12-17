@@ -25,7 +25,7 @@ MIN_P = 0.15
 MAX_P = 0.30
 
 def train():
-    # Setup Environment (Community Graph)
+    # Setup Environment (Caveman Graph)
     env = RumorEnv(n_nodes=TRAIN_NODES, m_edges=2, p_infect=0.25, daily_budget=TRAIN_BUDGET)
     
     # Setup Agent
@@ -55,23 +55,23 @@ def train():
         agent.epsilon = epsilon
         
         while not done and steps < 50:
-            # 1. Action
+            # Action
             action = agent.getAction(state, env.daily_budget)
             
-            # 2. Step
+            # Step
             env.inoculate(action)
             summary = env.step()
             
             newly_infected = len(summary['newly_infected'])
             current_infected = summary['counts']['infected']
             
-            # 3. Reward
+            # Reward
             reward = -1.0 * (current_infected + newly_infected)
             if current_infected == 0:
                 reward += 100 
                 done = True
             
-            # 4. Store
+            # Store
             next_state = env.get_state()
             memory.push(state, action, reward, next_state, done)
             
@@ -79,7 +79,7 @@ def train():
             total_reward += reward
             steps += 1
             
-            # 5. Training Step (The Heavy Loop)
+            # Training Step (The Heavy Loop)
             if len(memory) >= BATCH_SIZE:
                 transitions = memory.sample(BATCH_SIZE)
                 optimizer.zero_grad()

@@ -26,7 +26,7 @@ class ReplayBuffer:
     def __len__(self):
         return len(self.buffer)
 
-# --- 2. LOGGING UTILITY (Needed for GUI) ---
+# LOGGING UTILITY (Needed for GUI) ---
 def save_log_text(text, filename="rumor_log.txt"):
     """Saves the text from the GUI log to a file."""
     try:
