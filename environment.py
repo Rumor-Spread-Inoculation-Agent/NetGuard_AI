@@ -2,6 +2,7 @@ import random
 from typing import List, Dict
 import networkx as nx
 import numpy as np
+import math
 
 class RumorEnv:
     SUS = 0
@@ -22,9 +23,24 @@ class RumorEnv:
         self._build_graph()
 
     def _build_graph(self):
-        # --- THE CAVEMAN GRAPH ---
-        l = 6
-        k = 20
+        # We need to find l (cliques) and k (size)
+        # such that l * k is close to n_nodes.
+        # We try to maintain a clique size (k) of roughly 10-20 to preserve community structure.
+        
+        target_k = 20 # Desired clique size
+        if self.n_nodes < target_k * 2:
+            # If nodes are too few, split into 2 equal communities
+            l = 2
+            k = self.n_nodes // 2
+        else:
+            # Otherwise, calculate how many cliques of size 20 fit
+            l = self.n_nodes // target_k
+            k = target_k
+            
+        # Adjust n_nodes to match the actual graph generation (l * k)
+        # This prevents index errors if the graph is slightly smaller than requested
+        self.n_nodes = l * k 
+        
         self.G = nx.connected_caveman_graph(l, k)
         
         # --- PRE-CALCULATE CENTRALITY ---
@@ -42,7 +58,9 @@ class RumorEnv:
         
         # Select 'patient_zero' nodes to start the infection
         if self.initial_infected > 0:
-            patient_zero = random.sample(all_nodes, self.initial_infected)
+            # Ensure we don't try to infect more nodes than exist
+            count = min(self.initial_infected, len(all_nodes))
+            patient_zero = random.sample(all_nodes, count)
             for p in patient_zero:
                 self.status[p] = RumorEnv.INF  # Set their status to Infected (1)
 
