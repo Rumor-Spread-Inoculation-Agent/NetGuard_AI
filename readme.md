@@ -107,14 +107,14 @@ NetGuard-AI/
 └── README.md           # Project overview
 ```
 
-###📊 Results: The "Hub Fallacy"
+### 📊 Results: The "Hub Fallacy"
 
 Our experiments revealed that Popularity does not equal Virality.
 
 In modular communities, high-degree nodes ("Hubs") are often trapped inside their own clusters. The GraphSAGE Agent outperformed standard heuristics by learning to target Betweenness Centrality—the "Bridges" that allow the virus to jump between clusters.
 
 
-###👥 Contributors
+### 👥 Contributors
 
     Silajeet Banerjee - MCTS Agent Design and Implementation, DQN Agent Design and Implementation, GNN-DQN Agent Design and Implementation, GUI, Evaluation.
 
