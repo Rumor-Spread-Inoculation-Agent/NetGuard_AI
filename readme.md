@@ -15,7 +15,7 @@ By simulating SIR (Susceptible-Infected-Recovered) dynamics on **modular scale-f
 
 ## 🚀 Key Features
 
-* **Custom Gym Environment:** A stochastic simulation engine for rumor propagation on Caveman and Barabási-Albert graphs.
+* **Custom Gym Environment:** A stochastic simulation engine for rumor propagation on Caveman graph.
 * **Multi-Agent Support:**
     * **MCTS (Planning):** Monte Carlo Tree Search for look-ahead optimization.
     * **DQN (Model-Free):** Standard Deep Q-Network baseline.
@@ -38,7 +38,7 @@ By simulating SIR (Susceptible-Infected-Recovered) dynamics on **modular scale-f
 
 ### 1. Clone the Repository
 ```bash
-git clone [https://github.com/yourusername/NetGuard-AI.git](https://github.com/yourusername/NetGuard-AI.git)
+git clone https://github.com/Rumor-Spread-Inoculation-Agent/NetGuard_AI?tab=readme-ov-file#%EF%B8%8F-usage-guide
 cd NetGuard-AI
 ```
 
@@ -63,19 +63,19 @@ pip install -r requirements.txt
 
 To train the agents from scratch using the simulation environment:
 
-# Train the GraphSAGE (GNN) Agent:
+### Train the GraphSAGE (GNN) Agent:
 
 ```bash
 python train_gnn.py
 ```
-This will save the model weights to the models/ directory.
+This will save the model weights to the "models" directory.
 
-# Train the DQN Agent:
+### Train the DQN Agent:
 
 ```bash
 python train_dqn.py
 ```
-This will save the model weights to the models/ directory.
+This will save the model weights to the "models" directory.
 
 2. Running the Interactive Simulator (GUI)
 
@@ -93,6 +93,7 @@ python evaluate.py
 ```
 ### 📂 Project Structure
 
+```text
 NetGuard-AI/
 ├── agents.py           # Implementation of DQN, GNN, and MCTSAgent classes
 ├── environment.py      # Custom Gym Environment (SIR dynamics & Graph building)
@@ -104,6 +105,7 @@ NetGuard-AI/
 ├── NetGuardAI.pdf      # Full Project Documentation
 ├── requirements.txt    # Project dependencies
 └── README.md           # Project overview
+```
 
 ###📊 Results: The "Hub Fallacy"
 
@@ -114,6 +116,6 @@ In modular communities, high-degree nodes ("Hubs") are often trapped inside thei
 
 ###👥 Contributors
 
-    [Silajeet Banerjee] - MCTS Agent Design and Implementation, DQN Agent Design and Implementation, GNN-DQN Agent Design and Implementation, GUI, Evaluation.
+    Silajeet Banerjee - MCTS Agent Design and Implementation, DQN Agent Design and Implementation, GNN-DQN Agent Design and Implementation, GUI, Evaluation.
 
-    [Partner Name] - Heuristic Agent Design and Implementation, Random Agent Design and Implementation, GUI, Environment.
+    Sagnik Pal - Heuristic Agent Design and Implementation, Random Agent Design and Implementation, GUI, Environment.
