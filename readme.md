@@ -8,7 +8,7 @@
 
 By simulating SIR (Susceptible-Infected-Recovered) dynamics on **modular scale-free networks**, this project benchmarks traditional heuristics against AI agents. Our research uncovered the **"Hub Fallacy"**—demonstrating that while degree-based heuristics target influencers, our **GraphSAGE Agent** achieves superior containment by identifying and blocking "bridge" nodes (High Betweenness Centrality) that connect isolated communities.
 
-📄 **[Read the Full Project Report (PDF)](./NetGuardAI.pdf)**
+📄 **[Read the Full Project Report (PDF)](./NetGuard_AI.pdf)**
 *(Click above to view the detailed methodology, mathematical formulation, and ablation studies)*
 
 ---
